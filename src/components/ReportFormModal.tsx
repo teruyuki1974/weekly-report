@@ -9,7 +9,7 @@ interface ReportFormModalProps {
   currentUser: {
     id: string;
     name: string;
-    department: string | null;
+    department: { id: string; name: string } | null;
     role: string;
   };
 }
@@ -110,7 +110,7 @@ export function ReportFormModal({ currentUser }: ReportFormModalProps) {
                       </span>
                       {currentUser.department && (
                         <span className="text-xs text-zinc-500">
-                          ({currentUser.department})
+                          ({currentUser.department.name})
                         </span>
                       )}
                     </div>

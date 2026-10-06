@@ -2,14 +2,15 @@
 
 import { useTransition } from "react";
 import { logoutAction, quickLoginAction } from "@/app/actions";
-import { LogOut, User as UserIcon, ArrowRightLeft } from "lucide-react";
+import { LogOut, ArrowRightLeft, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 
 interface UserNavProps {
   user: {
     id: string;
     name: string;
     email: string;
-    department: string | null;
+    department: { id: string; name: string } | null;
     role: string;
   };
 }
@@ -18,9 +19,11 @@ export function UserNav({ user }: UserNavProps) {
   const [isPending, startTransition] = useTransition();
 
   const otherUsers = [
-    { name: "山田 太郎 (開発)", email: "alice@example.com" },
-    { name: "佐藤 花子 (デザイン)", email: "bob@example.com" },
-    { name: "鈴木 一郎 (営業)", email: "charlie@example.com" },
+    { name: "管理者", email: "admin@example.com", role: "ADMIN" },
+    { name: "山田 (開発)", email: "alice@example.com", role: "MEMBER" },
+    { name: "高橋 (開発MG)", email: "kenji@example.com", role: "MANAGER" },
+    { name: "佐藤 (デザイン)", email: "bob@example.com", role: "MANAGER" },
+    { name: "鈴木 (営業)", email: "charlie@example.com", role: "MEMBER" },
   ].filter((u) => u.email !== user.email);
 
   function handleLogout() {
@@ -39,7 +42,13 @@ export function UserNav({ user }: UserNavProps) {
     <div className="flex items-center gap-3">
       {/* ログインユーザー情報 */}
       <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-zinc-200 dark:border-zinc-800">
-        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center text-indigo-700 dark:text-indigo-400 font-bold text-xs">
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+            user.role === "ADMIN"
+              ? "bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
+              : "bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800"
+          }`}
+        >
           {user.name.slice(0, 1)}
         </div>
         <div className="text-left text-xs">
@@ -48,11 +57,20 @@ export function UserNav({ user }: UserNavProps) {
               {user.name}
             </span>
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-normal">
-              {user.department || "未所属"}
+              {user.department?.name || "未所属"}
             </span>
           </div>
-          <span className="text-[10px] text-zinc-400">
-            {user.role === "MANAGER" ? "マネージャー" : "メンバー"}
+          <span className="text-[10px] text-zinc-400 flex items-center gap-1">
+            {user.role === "ADMIN" ? (
+              <span className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-0.5">
+                <ShieldCheck className="w-3 h-3" />
+                管理者
+              </span>
+            ) : user.role === "MANAGER" ? (
+              "マネージャー"
+            ) : (
+              "メンバー"
+            )}
           </span>
         </div>
       </div>
@@ -63,14 +81,18 @@ export function UserNav({ user }: UserNavProps) {
           <ArrowRightLeft className="w-3 h-3" />
           切替:
         </span>
-        {otherUsers.map((u) => (
+        {otherUsers.slice(0, 4).map((u) => (
           <button
             key={u.email}
             onClick={() => handleSwitchUser(u.email)}
             disabled={isPending}
-            className="text-[11px] px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition"
+            className={`text-[10px] px-2 py-0.5 rounded border transition ${
+              u.role === "ADMIN"
+                ? "border-rose-200 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950"
+                : "border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+            }`}
           >
-            {u.name.split(" ")[0]}
+            {u.name}
           </button>
         ))}
       </div>

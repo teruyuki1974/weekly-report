@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { redirect } from "next/navigation";
 
 const SECRET_KEY = new TextEncoder().encode(
   process.env.SESSION_SECRET || "weekly-report-super-secret-key-300-users-development"
@@ -61,8 +62,15 @@ export async function getCurrentUser() {
         id: true,
         name: true,
         email: true,
-        department: true,
         role: true,
+        departmentId: true,
+        department: {
+          select: {
+            id: true,
+            name: true,
+            parentId: true,
+          },
+        },
         createdAt: true,
       },
     });
@@ -71,4 +79,12 @@ export async function getCurrentUser() {
   } catch {
     return null;
   }
+}
+
+export async function requireAdminUser() {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN") {
+    redirect("/");
+  }
+  return user;
 }

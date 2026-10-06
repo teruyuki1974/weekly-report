@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { loginAction, quickLoginAction } from "@/app/actions";
-import { LogIn, KeyRound, Mail, UserCheck, AlertCircle, ArrowRight } from "lucide-react";
+import { LogIn, KeyRound, Mail, UserCheck, AlertCircle, ArrowRight, ShieldCheck } from "lucide-react";
 
 export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
@@ -10,25 +10,39 @@ export function LoginForm() {
 
   const demoUsers = [
     {
+      name: "システム管理者",
+      department: "全社・管理本部",
+      role: "管理者",
+      email: "admin@example.com",
+      isAdmin: true,
+    },
+    {
       name: "山田 太郎",
-      department: "開発部",
+      department: "フロントエンド開発部",
       role: "一般メンバー",
       email: "alice@example.com",
-      color: "bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100",
+      isAdmin: false,
+    },
+    {
+      name: "高橋 健二",
+      department: "開発本部",
+      role: "マネージャー",
+      email: "kenji@example.com",
+      isAdmin: false,
     },
     {
       name: "佐藤 花子",
-      department: "デザイン部",
+      department: "UI/UXデザイン部",
       role: "マネージャー",
       email: "bob@example.com",
-      color: "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100",
+      isAdmin: false,
     },
     {
       name: "鈴木 一郎",
-      department: "営業部",
+      department: "首都圏営業部",
       role: "一般メンバー",
       email: "charlie@example.com",
-      color: "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100",
+      isAdmin: false,
     },
   ];
 
@@ -73,8 +87,8 @@ export function LoginForm() {
               name="email"
               type="email"
               required
-              placeholder="例: alice@example.com"
-              defaultValue="alice@example.com"
+              placeholder="例: admin@example.com"
+              defaultValue="admin@example.com"
               className="w-full pl-9 pr-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
@@ -123,7 +137,7 @@ export function LoginForm() {
         </div>
 
         <p className="text-[11px] text-zinc-500 leading-relaxed">
-          クリックすると各ユーザーとして即座にログインし、週報の作成や閲覧権限を検証できます。
+          管理者や各部署メンバーとしてログインし、ツリービューや管理画面への導線を確認できます。
         </p>
 
         <div className="space-y-2">
@@ -133,7 +147,11 @@ export function LoginForm() {
               type="button"
               disabled={isPending}
               onClick={() => handleQuickLogin(u.email)}
-              className="w-full flex items-center justify-between p-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 hover:border-indigo-300 dark:hover:border-indigo-700 transition text-left group"
+              className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition text-left group ${
+                u.isAdmin
+                  ? "bg-rose-50/60 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900 hover:border-rose-400"
+                  : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-700"
+              }`}
             >
               <div>
                 <div className="flex items-center gap-2">
@@ -143,6 +161,12 @@ export function LoginForm() {
                   <span className="text-[11px] px-1.5 py-0.2 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400">
                     {u.department}
                   </span>
+                  {u.isAdmin && (
+                    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300">
+                      <ShieldCheck className="w-3 h-3" />
+                      管理者
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-zinc-400">{u.email}</p>
               </div>
