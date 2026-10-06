@@ -1,16 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { User } from "@prisma/client";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { createReport } from "@/app/actions";
-import { PlusCircle, Eye, Edit3, X } from "lucide-react";
+import { PlusCircle, Eye, Edit3, X, User as UserIcon } from "lucide-react";
 
 interface ReportFormModalProps {
-  users: User[];
+  currentUser: {
+    id: string;
+    name: string;
+    department: string | null;
+    role: string;
+  };
 }
 
-export function ReportFormModal({ users }: ReportFormModalProps) {
+export function ReportFormModal({ currentUser }: ReportFormModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"edit" | "preview">("edit");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,12 +34,10 @@ export function ReportFormModal({ users }: ReportFormModalProps) {
 
   const [content, setContent] = useState(defaultContent);
   const [title, setTitle] = useState("週報: ");
-  const [selectedUserId, setSelectedUserId] = useState(users[0]?.id || "");
   const [status, setStatus] = useState<"DRAFT" | "SUBMITTED">("SUBMITTED");
 
   const now = new Date();
   const currentYear = now.getFullYear();
-  // おおよその週番号
   const startOfYear = new Date(currentYear, 0, 1);
   const pastDaysOfYear = (now.getTime() - startOfYear.getTime()) / 86400000;
   const currentWeekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
@@ -44,7 +46,6 @@ export function ReportFormModal({ users }: ReportFormModalProps) {
     e.preventDefault();
     setIsSubmitting(true);
     const formData = new FormData();
-    formData.append("userId", selectedUserId);
     formData.append("title", title);
     formData.append("content", content);
     formData.append("year", currentYear.toString());
@@ -96,23 +97,23 @@ export function ReportFormModal({ users }: ReportFormModalProps) {
             {/* Form */}
             <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
               <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                {/* ユーザー選択 & タイトル */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* ログインユーザー情報表示 & タイトル */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                   <div>
                     <label className="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
-                      提出者（プロトタイプ選択）
+                      提出者（ログイン中）
                     </label>
-                    <select
-                      value={selectedUserId}
-                      onChange={(e) => setSelectedUserId(e.target.value)}
-                      className="w-full text-sm border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name} ({u.department || "未所属"})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-sm">
+                      <UserIcon className="w-4 h-4 text-indigo-500 shrink-0" />
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                        {currentUser.name}
+                      </span>
+                      {currentUser.department && (
+                        <span className="text-xs text-zinc-500">
+                          ({currentUser.department})
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="md:col-span-2">
