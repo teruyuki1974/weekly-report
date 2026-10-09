@@ -177,6 +177,35 @@ async function getDescendantDepartmentIds(deptId: string): Promise<string[]> {
   return ids;
 }
 
+const reportIncludeOptions = {
+  user: {
+    include: {
+      department: true,
+    },
+  },
+  comments: {
+    include: {
+      user: {
+        include: {
+          department: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
+  likes: {
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
+};
+
 export async function getReports(options?: {
   departmentId?: string;
   userId?: string;
@@ -204,19 +233,197 @@ export async function getReports(options?: {
 
   return await prisma.weeklyReport.findMany({
     where,
+    include: reportIncludeOptions,
+    orderBy: [{ year: "desc" }, { weekNumber: "desc" }, { createdAt: "desc" }],
+  });
+}
+
+// --- チェック（★）機能 ---
+
+export async function getCheckedUserIds(currentUserId?: string): Promise<string[]> {
+  if (!currentUserId) return [];
+  const checks = await prisma.userCheck.findMany({
+    where: { userId: currentUserId },
+    select: { targetId: true },
+  });
+  return checks.map((c) => c.targetId);
+}
+
+export async function toggleUserCheckAction(targetUserId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    throw new Error("ログインしてください。");
+  }
+
+  const existing = await prisma.userCheck.findUnique({
+    where: {
+      userId_targetId: {
+        userId: currentUser.id,
+        targetId: targetUserId,
+      },
+    },
+  });
+
+  let isChecked = false;
+  if (existing) {
+    await prisma.userCheck.delete({
+      where: { id: existing.id },
+    });
+    isChecked = false;
+  } else {
+    await prisma.userCheck.create({
+      data: {
+        userId: currentUser.id,
+        targetId: targetUserId,
+      },
+    });
+    isChecked = true;
+  }
+
+  revalidatePath("/");
+  return { ok: true, isChecked };
+}
+
+// チェック対象者の「最新の週報」だけを取得する
+export async function getCheckedLatestReports(options: {
+  currentUserId: string;
+  search?: string;
+}) {
+  const checkedUserIds = await getCheckedUserIds(options.currentUserId);
+  if (checkedUserIds.length === 0) {
+    return { reports: [], checkedUserIds: [] };
+  }
+
+  const where: any = {
+    userId: { in: checkedUserIds },
+  };
+
+  if (options.search) {
+    where.OR = [
+      { title: { contains: options.search, mode: "insensitive" } },
+      { content: { contains: options.search, mode: "insensitive" } },
+      { user: { name: { contains: options.search, mode: "insensitive" } } },
+    ];
+  }
+
+  const allReports = await prisma.weeklyReport.findMany({
+    where,
+    include: reportIncludeOptions,
+    orderBy: [{ year: "desc" }, { weekNumber: "desc" }, { createdAt: "desc" }],
+  });
+
+  // 各ユーザーごとに最新の1件のみを抽出
+  const latestReportsMap = new Map<string, (typeof allReports)[0]>();
+  for (const report of allReports) {
+    if (!latestReportsMap.has(report.userId)) {
+      latestReportsMap.set(report.userId, report);
+    }
+  }
+
+  return {
+    reports: Array.from(latestReportsMap.values()),
+    checkedUserIds,
+  };
+}
+
+// --- いいね（Like）機能 ---
+
+export async function toggleReportLikeAction(reportId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    throw new Error("ログインしてください。");
+  }
+
+  const existing = await prisma.reportLike.findUnique({
+    where: {
+      reportId_userId: {
+        reportId,
+        userId: currentUser.id,
+      },
+    },
+  });
+
+  let isLiked = false;
+  if (existing) {
+    await prisma.reportLike.delete({
+      where: { id: existing.id },
+    });
+    isLiked = false;
+  } else {
+    await prisma.reportLike.create({
+      data: {
+        reportId,
+        userId: currentUser.id,
+      },
+    });
+    isLiked = true;
+  }
+
+  const likeCount = await prisma.reportLike.count({
+    where: { reportId },
+  });
+
+  revalidatePath("/");
+  return { ok: true, isLiked, likeCount };
+}
+
+// --- コメント機能 ---
+
+export async function addReportCommentAction(reportId: string, content: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    throw new Error("ログインしてください。");
+  }
+
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error("コメントを入力してください。");
+  }
+
+  const comment = await prisma.comment.create({
+    data: {
+      reportId,
+      userId: currentUser.id,
+      content: trimmed,
+    },
     include: {
       user: {
         include: {
           department: true,
         },
       },
-      comments: {
-        include: { user: true },
-        orderBy: { createdAt: "asc" },
-      },
     },
-    orderBy: [{ year: "desc" }, { weekNumber: "desc" }, { createdAt: "desc" }],
   });
+
+  revalidatePath("/");
+  return { ok: true, comment };
+}
+
+export async function deleteReportCommentAction(commentId: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    throw new Error("ログインしてください。");
+  }
+
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+  });
+
+  if (!comment) {
+    throw new Error("コメントが見つかりません。");
+  }
+
+  // 投稿者本人またはADMINのみ削除可能
+  if (comment.userId !== currentUser.id && currentUser.role !== Role.ADMIN) {
+    throw new Error("コメントを削除する権限がありません。");
+  }
+
+  await prisma.comment.delete({
+    where: { id: commentId },
+  });
+
+  revalidatePath("/");
+  return { ok: true };
 }
 
 // --- 週報作成（ログイン中のユーザーに紐づけ） ---
@@ -229,6 +436,7 @@ export async function createReport(formData: FormData) {
 
   const title = formData.get("title") as string;
   const content = formData.get("content") as string;
+  const workHours = parseFloat(formData.get("workHours") as string) || 40.0;
   const year = parseInt(formData.get("year") as string, 10) || new Date().getFullYear();
   const weekNumber = parseInt(formData.get("weekNumber") as string, 10) || 1;
   const statusStr = formData.get("status") as string;
@@ -251,6 +459,7 @@ export async function createReport(formData: FormData) {
     update: {
       title,
       content,
+      workHours,
       status,
       submittedAt: status === ReportStatus.SUBMITTED ? now : null,
     },
@@ -258,6 +467,7 @@ export async function createReport(formData: FormData) {
       userId: currentUser.id,
       title,
       content,
+      workHours,
       year,
       weekNumber,
       startDate,
@@ -268,7 +478,148 @@ export async function createReport(formData: FormData) {
   });
 
   revalidatePath("/");
+  revalidatePath("/analytics/work-hours");
   return { ok: true };
+}
+
+// --- マネージャー向け: 配下メンバーの稼働時間集計（積み上げグラフ用） ---
+
+export async function getManagerWorkHoursAnalytics(selectedDeptId?: string) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    throw new Error("ログインしてください。");
+  }
+
+  const isManagerOrAdmin =
+    currentUser.role === Role.MANAGER || currentUser.role === Role.ADMIN;
+  if (!isManagerOrAdmin) {
+    throw new Error("マネージャーまたは管理者権限が必要です。");
+  }
+
+  // 対象部門の特定（配下部門を再帰的に取得）
+  let targetDeptIds: string[] = [];
+  if (currentUser.role === Role.ADMIN) {
+    if (selectedDeptId && selectedDeptId !== "all") {
+      targetDeptIds = await getDescendantDepartmentIds(selectedDeptId);
+    } else {
+      const all = await prisma.department.findMany({ select: { id: true } });
+      targetDeptIds = all.map((d) => d.id);
+    }
+  } else {
+    // MANAGERの場合: 自部門とその子部門が管理対象
+    const baseDeptId = currentUser.departmentId;
+    if (!baseDeptId) {
+      targetDeptIds = [];
+    } else if (selectedDeptId && selectedDeptId !== "all") {
+      targetDeptIds = await getDescendantDepartmentIds(selectedDeptId);
+    } else {
+      targetDeptIds = await getDescendantDepartmentIds(baseDeptId);
+    }
+  }
+
+  // 配下メンバーを取得
+  const members = await prisma.user.findMany({
+    where: {
+      departmentId: { in: targetDeptIds },
+    },
+    include: {
+      department: true,
+    },
+    orderBy: [{ department: { order: "asc" } }, { role: "desc" }, { name: "asc" }],
+  });
+
+  const memberIds = members.map((m) => m.id);
+
+  // 対象メンバーの週報を取得
+  const reports = await prisma.weeklyReport.findMany({
+    where: {
+      userId: { in: memberIds },
+    },
+    include: {
+      user: {
+        include: { department: true },
+      },
+    },
+    orderBy: [{ year: "asc" }, { weekNumber: "asc" }],
+  });
+
+  // ユニークな週（年-週番号）の抽出
+  const weekSet = new Set<string>();
+  reports.forEach((r) => weekSet.add(`${r.year}-${r.weekNumber}`));
+
+  // データが少ない場合でも最新の週を含める
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const startOfYear = new Date(currentYear, 0, 1);
+  const pastDaysOfYear = (now.getTime() - startOfYear.getTime()) / 86400000;
+  const currentWeekNumber = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
+  weekSet.add(`${currentYear}-${currentWeekNumber}`);
+
+  const sortedWeeks = Array.from(weekSet).sort((a, b) => {
+    const [yA, wA] = a.split("-").map(Number);
+    const [yB, wB] = b.split("-").map(Number);
+    return yA === yB ? wA - wB : yA - yB;
+  });
+
+  // 各週ごとの積み上げ集計
+  const weeklyData = sortedWeeks.map((key) => {
+    const [year, weekNumber] = key.split("-").map(Number);
+    const weekReports = reports.filter(
+      (r) => r.year === year && r.weekNumber === weekNumber
+    );
+
+    let totalHours = 0;
+    const memberHoursMap: Record<string, { hours: number; title: string; status: ReportStatus }> = {};
+
+    weekReports.forEach((r) => {
+      totalHours += r.workHours;
+      memberHoursMap[r.userId] = {
+        hours: r.workHours,
+        title: r.title,
+        status: r.status,
+      };
+    });
+
+    const breakdown = members.map((m) => {
+      const reportInfo = memberHoursMap[m.id];
+      return {
+        userId: m.id,
+        userName: m.name,
+        departmentName: m.department?.name || "未所属",
+        hours: reportInfo ? reportInfo.hours : 0,
+        reportTitle: reportInfo ? reportInfo.title : null,
+        status: reportInfo ? reportInfo.status : null,
+        hasSubmitted: !!reportInfo,
+      };
+    });
+
+    const submittedCount = breakdown.filter((b) => b.hasSubmitted).length;
+
+    return {
+      year,
+      weekNumber,
+      weekLabel: `${year}年 第${weekNumber}週`,
+      totalHours: Math.round(totalHours * 10) / 10,
+      averageHours:
+        submittedCount > 0
+          ? Math.round((totalHours / submittedCount) * 10) / 10
+          : 0,
+      breakdown,
+    };
+  });
+
+  // 選択可能な管理対象部門一覧
+  const accessibleDepartments = await prisma.department.findMany({
+    where: currentUser.role === Role.ADMIN ? {} : { id: { in: targetDeptIds } },
+    orderBy: { order: "asc" },
+  });
+
+  return {
+    currentUser,
+    members,
+    weeklyData,
+    departments: accessibleDepartments,
+  };
 }
 
 // ==========================================

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { createReport } from "@/app/actions";
-import { PlusCircle, Eye, Edit3, X, User as UserIcon } from "lucide-react";
+import { PlusCircle, Eye, Edit3, X, User as UserIcon, Clock } from "lucide-react";
 
 interface ReportFormModalProps {
   currentUser: {
@@ -34,6 +34,7 @@ export function ReportFormModal({ currentUser }: ReportFormModalProps) {
 
   const [content, setContent] = useState(defaultContent);
   const [title, setTitle] = useState("週報: ");
+  const [workHours, setWorkHours] = useState<number>(40.0);
   const [status, setStatus] = useState<"DRAFT" | "SUBMITTED">("SUBMITTED");
 
   const now = new Date();
@@ -48,6 +49,7 @@ export function ReportFormModal({ currentUser }: ReportFormModalProps) {
     const formData = new FormData();
     formData.append("title", title);
     formData.append("content", content);
+    formData.append("workHours", workHours.toString());
     formData.append("year", currentYear.toString());
     formData.append("weekNumber", currentWeekNumber.toString());
     formData.append("status", status);
@@ -109,7 +111,7 @@ export function ReportFormModal({ currentUser }: ReportFormModalProps) {
                         {currentUser.name}
                       </span>
                       {currentUser.department && (
-                        <span className="text-xs text-zinc-500">
+                        <span className="text-xs text-zinc-500 truncate">
                           ({currentUser.department.name})
                         </span>
                       )}
@@ -128,6 +130,51 @@ export function ReportFormModal({ currentUser }: ReportFormModalProps) {
                       placeholder="例: 週報: 今週の成果と課題"
                       className="w-full text-sm border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-zinc-50 dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
+                  </div>
+                </div>
+
+                {/* その週の稼働時間入力欄 */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                          その週の実働稼働時間
+                        </label>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-100 dark:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 font-semibold">
+                          必須
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">
+                        マネージャーの積み上げグラフ集計・稼働管理に反映されます
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="168"
+                        required
+                        value={workHours}
+                        onChange={(e) => setWorkHours(parseFloat(e.target.value) || 0)}
+                        className="w-24 text-right pr-2 pl-3 py-1.5 text-sm font-bold border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">
+                      時間 (h)
+                    </span>
+                    {workHours > 45 && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 whitespace-nowrap">
+                        45h超過
+                      </span>
+                    )}
                   </div>
                 </div>
 

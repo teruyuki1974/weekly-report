@@ -18,18 +18,24 @@ import {
   ShieldCheck,
   Briefcase,
   Layers,
+  BarChart3,
+  Clock,
+  Star,
 } from "lucide-react";
+import { UserCheckButton } from "@/components/UserCheckButton";
 
 interface SidebarTreeProps {
   tree: DepartmentTreeNode[];
   currentUserId: string;
   currentUserRole: Role;
+  checkedUserIds?: string[];
 }
 
 export function SidebarTree({
   tree,
   currentUserId,
   currentUserRole,
+  checkedUserIds = [],
 }: SidebarTreeProps) {
   const searchParams = useSearchParams();
   const currentDeptId = searchParams.get("departmentId");
@@ -37,6 +43,8 @@ export function SidebarTree({
   const currentView = searchParams.get("view");
 
   const isAdmin = currentUserRole === Role.ADMIN;
+  const isManager = currentUserRole === Role.MANAGER || currentUserRole === Role.ADMIN;
+  const isCheckedView = !currentDeptId && !currentFilterUserId && (!currentView || currentView === "checked");
 
   return (
     <aside className="w-72 shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col h-[calc(100vh-4rem)] sticky top-16 overflow-hidden">
@@ -68,12 +76,33 @@ export function SidebarTree({
         </div>
       )}
 
-      {/* 2. 基本ナビゲーション */}
+      {/* 2. 基本ナビゲーション & マネージャー向けリンク */}
       <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 space-y-1">
+        {/* ★ チェック対象のタイムライン（最新週報）- デフォルト */}
         <Link
           href="/"
+          className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition ${
+            isCheckedView
+              ? "bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-200/80 dark:border-amber-900/60"
+              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <Star className={`w-4 h-4 ${isCheckedView ? "fill-amber-400 text-amber-500" : "text-amber-500"}`} />
+            <span>チェック対象（最新週報）</span>
+          </div>
+          {checkedUserIds.length > 0 && (
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-900/80 text-amber-700 dark:text-amber-300 font-bold">
+              {checkedUserIds.length}名
+            </span>
+          )}
+        </Link>
+
+        {/* すべての週報 */}
+        <Link
+          href="/?view=all"
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
-            !currentDeptId && !currentFilterUserId && currentView !== "mine"
+            !currentDeptId && !currentFilterUserId && currentView === "all"
               ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 font-semibold"
               : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
           }`}
@@ -81,6 +110,8 @@ export function SidebarTree({
           <FileText className="w-4 h-4 text-indigo-500" />
           <span>すべての週報</span>
         </Link>
+
+        {/* 自分の週報 */}
         <Link
           href="/?view=mine"
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
@@ -92,6 +123,27 @@ export function SidebarTree({
           <UserIcon className="w-4 h-4 text-purple-500" />
           <span>自分の週報</span>
         </Link>
+
+        {/* マネージャー向け稼働時間集計リンク */}
+        {isManager && (
+          <Link
+            href="/analytics/work-hours"
+            className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-950/60 transition group"
+          >
+            <div className="flex items-center gap-2.5">
+              <BarChart3 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex flex-col text-left">
+                <span className="font-bold flex items-center gap-1">
+                  配下メンバー稼働集計
+                </span>
+                <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
+                  積み上げグラフ表示
+                </span>
+              </div>
+            </div>
+            <ChevronRight className="w-3.5 h-3.5 text-emerald-500 group-hover:translate-x-0.5 transition" />
+          </Link>
+        )}
       </div>
 
       {/* 3. 組織・ユーザー ツリービュー */}
@@ -113,6 +165,7 @@ export function SidebarTree({
               currentDeptId={currentDeptId}
               currentFilterUserId={currentFilterUserId}
               currentUserId={currentUserId}
+              checkedUserIds={checkedUserIds}
             />
           ))}
         </div>
@@ -133,6 +186,7 @@ interface TreeNodeItemProps {
   currentDeptId: string | null;
   currentFilterUserId: string | null;
   currentUserId: string;
+  checkedUserIds: string[];
 }
 
 function TreeNodeItem({
@@ -141,6 +195,7 @@ function TreeNodeItem({
   currentDeptId,
   currentFilterUserId,
   currentUserId,
+  checkedUserIds,
 }: TreeNodeItemProps) {
   // 初期状態では第1〜第2階層を開いておく
   const [isOpen, setIsOpen] = useState(level < 2);
@@ -210,6 +265,7 @@ function TreeNodeItem({
               currentDeptId={currentDeptId}
               currentFilterUserId={currentFilterUserId}
               currentUserId={currentUserId}
+              checkedUserIds={checkedUserIds}
             />
           ))}
 
@@ -217,11 +273,11 @@ function TreeNodeItem({
           {node.users.map((user) => {
             const isUserSelected = currentFilterUserId === user.id;
             const isMe = user.id === currentUserId;
+            const isChecked = checkedUserIds.includes(user.id);
 
             return (
-              <Link
+              <div
                 key={user.id}
-                href={`/?userId=${user.id}`}
                 className={`flex items-center justify-between rounded-lg py-1 px-2 transition group ${
                   isUserSelected
                     ? "bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-200 font-semibold"
@@ -231,7 +287,10 @@ function TreeNodeItem({
                   paddingLeft: `${(level + 1) * 16 + 18}px`,
                 }}
               >
-                <div className="flex items-center gap-1.5 truncate">
+                <Link
+                  href={`/?userId=${user.id}`}
+                  className="flex items-center gap-1.5 truncate flex-1 min-w-0 mr-1"
+                >
                   <UserIcon className="w-3 h-3 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 shrink-0" />
                   <span className="truncate">{user.name}</span>
                   {isMe && (
@@ -239,18 +298,30 @@ function TreeNodeItem({
                       自分
                     </span>
                   )}
-                </div>
+                </Link>
 
-                {user.role === Role.ADMIN ? (
-                  <span className="text-[9px] px-1 py-0.2 rounded bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 shrink-0">
-                    管理者
-                  </span>
-                ) : user.role === Role.MANAGER ? (
-                  <span className="text-[9px] px-1 py-0.2 rounded bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 shrink-0">
-                    MG
-                  </span>
-                ) : null}
-              </Link>
+                <div className="flex items-center gap-1 shrink-0">
+                  {user.role === Role.ADMIN ? (
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400">
+                      管理者
+                    </span>
+                  ) : user.role === Role.MANAGER ? (
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
+                      MG
+                    </span>
+                  ) : null}
+
+                  {/* チェック（★）ボタン */}
+                  {!isMe && (
+                    <UserCheckButton
+                      targetUserId={user.id}
+                      targetUserName={user.name}
+                      initialChecked={isChecked}
+                      size="sm"
+                    />
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>

@@ -4,6 +4,8 @@ import {
   getUsers,
   getDepartmentTree,
   getAllDepartments,
+  getCheckedUserIds,
+  getCheckedLatestReports,
 } from "./actions";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -11,6 +13,8 @@ import { ReportFormModal } from "@/components/ReportFormModal";
 import { UserNav } from "@/components/UserNav";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { SidebarTree } from "@/components/SidebarTree";
+import { UserCheckButton } from "@/components/UserCheckButton";
+import { ReportInteractions } from "@/components/ReportInteractions";
 import {
   Database,
   Users,
@@ -21,6 +25,8 @@ import {
   Filter,
   X,
   Search,
+  Clock,
+  Star,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -43,17 +49,29 @@ export default async function Home({ searchParams }: HomePageProps) {
 
   const { departmentId, userId, view, search } = await searchParams;
 
-  const [health, users, tree, departments, allReports] = await Promise.all([
-    getDbHealth(),
-    getUsers(),
-    getDepartmentTree(),
-    getAllDepartments(),
-    getReports({
-      departmentId,
-      userId: view === "mine" ? currentUser.id : userId,
-      search,
-    }),
-  ]);
+  // デフォルトは「チェック対象のタイムライン（最新週報）」
+  const isDefaultCheckedView = !departmentId && !userId && (!view || view === "checked");
+
+  const [health, users, tree, departments, checkedUserIds, reportsResult] =
+    await Promise.all([
+      getDbHealth(),
+      getUsers(),
+      getDepartmentTree(),
+      getAllDepartments(),
+      getCheckedUserIds(currentUser.id),
+      isDefaultCheckedView
+        ? getCheckedLatestReports({
+            currentUserId: currentUser.id,
+            search,
+          })
+        : getReports({
+            departmentId,
+            userId: view === "mine" ? currentUser.id : userId,
+            search,
+          }).then((reports) => ({ reports, checkedUserIds: [] })),
+    ]);
+
+  const allReports = reportsResult.reports;
 
   // 絞り込み対象の名前
   const selectedDept = departmentId
@@ -107,6 +125,7 @@ export default async function Home({ searchParams }: HomePageProps) {
           tree={tree}
           currentUserId={currentUser.id}
           currentUserRole={currentUser.role}
+          checkedUserIds={checkedUserIds}
         />
 
         {/* 右側メインエリア */}
@@ -183,38 +202,90 @@ export default async function Home({ searchParams }: HomePageProps) {
 
           {/* Weekly Reports Feed */}
           <section className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold">
-                  {selectedDept
-                    ? `${selectedDept.name} の週報`
-                    : selectedUser
-                    ? `${selectedUser.name} さんの週報`
-                    : view === "mine"
-                    ? "あなたの週報"
-                    : "全社の週報タイムライン"}
-                </h2>
-                <p className="text-xs text-zinc-500">
-                  左のツリービューで部門やメンバーをクリックすると対象を絞り込めます
+                <div className="flex items-center gap-2">
+                  {isDefaultCheckedView && (
+                    <div className="p-1 rounded-lg bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400">
+                      <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
+                    </div>
+                  )}
+                  <h2 className="text-lg font-bold flex items-center gap-2">
+                    {selectedDept
+                      ? `${selectedDept.name} の週報`
+                      : selectedUser
+                      ? `${selectedUser.name} さんの週報`
+                      : view === "mine"
+                      ? "あなたの週報"
+                      : view === "all"
+                      ? "全社の週報タイムライン"
+                      : "チェック対象のタイムライン（最新週報）"}
+                  </h2>
+                </div>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {isDefaultCheckedView
+                    ? `★でチェックを入れたメンバー（${checkedUserIds.length}名）の最新の週報のみを表示しています`
+                    : "左のツリービューで部門やメンバーをクリックすると対象を絞り込めます"}
                 </p>
               </div>
-              <div className="text-xs text-zinc-400">全 {allReports.length} 件</div>
+
+              {/* 表示切り替えタブ（チェック対象 ⇄ すべての週報） */}
+              <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-xs shrink-0 self-start sm:self-auto">
+                <Link
+                  href="/"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition ${
+                    isDefaultCheckedView
+                      ? "bg-white dark:bg-zinc-900 text-amber-700 dark:text-amber-300 shadow-xs font-bold"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  <Star className={`w-3.5 h-3.5 ${isDefaultCheckedView ? "fill-amber-400 text-amber-500" : ""}`} />
+                  <span>チェック対象 ({checkedUserIds.length})</span>
+                </Link>
+                <Link
+                  href="/?view=all"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition ${
+                    view === "all"
+                      ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>すべての週報</span>
+                </Link>
+              </div>
             </div>
 
             {allReports.length === 0 ? (
-              <div className="text-center py-16 bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl">
-                <FileText className="w-10 h-10 mx-auto text-zinc-400 mb-3" />
-                <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                  該当する週報がありません
+              <div className="text-center py-16 bg-white dark:bg-zinc-900 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl p-6 space-y-3">
+                <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/70 text-amber-500 mx-auto flex items-center justify-center">
+                  <Star className="w-6 h-6 fill-amber-400" />
+                </div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+                  {isDefaultCheckedView ? "チェック中のメンバーがいません" : "該当する週報がありません"}
+                </h3>
+                <p className="text-xs text-zinc-500 max-w-md mx-auto">
+                  {isDefaultCheckedView
+                    ? "左の組織ツリーや「すべての週報」タイムラインにある★マークをクリックしてメンバーをチェックすると、そのメンバーの最新週報がここに一覧表示されます。"
+                    : "右上の「週報を作成する」ボタンから投稿するか、別の部門・メンバーを選択してください。"}
                 </p>
-                <p className="text-xs text-zinc-400 mt-1">
-                  右上の「週報を作成する」ボタンから投稿するか、別の部門・メンバーを選択してください。
-                </p>
+                {isDefaultCheckedView && (
+                  <div className="pt-2">
+                    <Link
+                      href="/?view=all"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>すべての週報を見に行く</span>
+                    </Link>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
                 {allReports.map((report) => {
                   const isMyReport = report.userId === currentUser.id;
+                  const isUserChecked = checkedUserIds.includes(report.user.id);
 
                   return (
                     <article
@@ -229,12 +300,23 @@ export default async function Home({ searchParams }: HomePageProps) {
                       <div className="p-5 border-b border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
+                            {/* ★ チェックボタン（投稿者名横） */}
+                            {!isMyReport && (
+                              <UserCheckButton
+                                targetUserId={report.user.id}
+                                targetUserName={report.user.name}
+                                initialChecked={isUserChecked}
+                                size="sm"
+                              />
+                            )}
+
                             <Link
                               href={`/?userId=${report.user.id}`}
-                              className="font-semibold text-zinc-900 dark:text-zinc-100 text-sm hover:underline"
+                              className="font-bold text-zinc-900 dark:text-zinc-100 text-sm hover:underline"
                             >
                               {report.user.name}
                             </Link>
+
                             {report.user.department && (
                               <Link
                                 href={`/?departmentId=${report.user.department.id}`}
@@ -243,6 +325,14 @@ export default async function Home({ searchParams }: HomePageProps) {
                                 {report.user.department.name}
                               </Link>
                             )}
+
+                            {isDefaultCheckedView && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center gap-0.5">
+                                <Star className="w-2.5 h-2.5 fill-amber-400" />
+                                最新週報
+                              </span>
+                            )}
+
                             <span
                               className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
                                 report.status === "SUBMITTED"
@@ -259,12 +349,19 @@ export default async function Home({ searchParams }: HomePageProps) {
                               </span>
                             )}
                           </div>
-                          <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100">
-                            {report.title}
-                          </h3>
+
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100">
+                              {report.title}
+                            </h3>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-4 text-xs text-zinc-400 shrink-0">
+                        <div className="flex items-center gap-3 text-xs text-zinc-400 shrink-0">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-semibold">
+                            <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                            {(report.workHours ?? 40).toFixed(1)} 時間
+                          </span>
                           <span className="inline-flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5" />
                             {report.year}年 第{report.weekNumber}週
@@ -277,8 +374,18 @@ export default async function Home({ searchParams }: HomePageProps) {
                         <MarkdownRenderer content={report.content} />
                       </div>
 
+                      {/* いいねボタン & コメント入力・一覧エリア */}
+                      <ReportInteractions
+                        reportId={report.id}
+                        initialLikes={(report as any).likes || []}
+                        initialComments={(report as any).comments || []}
+                        currentUserId={currentUser.id}
+                        currentUserRole={currentUser.role}
+                        currentUserName={currentUser.name}
+                      />
+
                       {/* Article Footer */}
-                      <div className="px-6 py-3 bg-zinc-50 dark:bg-zinc-900/30 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                      <div className="px-6 py-2.5 bg-zinc-50/60 dark:bg-zinc-900/40 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px] text-zinc-400">
                         <span>
                           作成日:{" "}
                           {new Date(report.createdAt).toLocaleDateString("ja-JP")}

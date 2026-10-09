@@ -44,8 +44,26 @@ model User {
   updatedAt    DateTime       @updatedAt
   reports      WeeklyReport[]
   comments     Comment[]
+  likes        ReportLike[]
+  checksGiven    UserCheck[] @relation("UserChecks")
+  checksReceived UserCheck[] @relation("TargetUserChecks")
 
   @@map("users")
+}
+
+model UserCheck {
+  id         String   @id @default(cuid())
+  userId     String
+  targetId   String
+  createdAt  DateTime @default(now())
+
+  user       User     @relation("UserChecks", fields: [userId], references: [id], onDelete: Cascade)
+  targetUser User     @relation("TargetUserChecks", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetId])
+  @@index([userId])
+  @@index([targetId])
+  @@map("user_checks")
 }
 
 model WeeklyReport {
@@ -58,14 +76,30 @@ model WeeklyReport {
   weekNumber  Int
   title       String
   content     String       @db.Text
+  workHours   Float        @default(40.0)
   status      ReportStatus @default(DRAFT)
   submittedAt DateTime?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   comments    Comment[]
+  likes       ReportLike[]
 
   @@unique([userId, year, weekNumber])
   @@map("weekly_reports")
+}
+
+model ReportLike {
+  id        String       @id @default(cuid())
+  reportId  String
+  report    WeeklyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([reportId, userId])
+  @@index([reportId])
+  @@index([userId])
+  @@map("report_likes")
 }
 
 model Comment {
@@ -78,5 +112,7 @@ model Comment {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
+  @@index([reportId])
+  @@index([userId])
   @@map("comments")
 }
